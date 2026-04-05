@@ -1,0 +1,779 @@
+    <!-- <?php
+require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/functions.php';
+
+$slug = trim($_GET['slug'] ?? '');
+
+$stmt = $pdo->prepare("SELECT * FROM models WHERE slug = ?");
+$stmt->execute([$slug]);
+$model = $stmt->fetch();
+
+if (!$model) {
+    http_response_code(404);
+    exit('Модель не найдена');
+}
+
+$relatedStmt = $pdo->prepare("SELECT * FROM models WHERE category = ? AND id != ? ORDER BY created_at DESC LIMIT 3");
+$relatedStmt->execute([$model['category'], $model['id']]);
+$related = $relatedStmt->fetchAll();
+
+$formats = [];
+if (!empty($model['file_fbx'])) $formats['FBX'] = $model['file_fbx'];
+if (!empty($model['file_obj'])) $formats['OBJ'] = $model['file_obj'];
+if (!empty($model['file_blend'])) $formats['BLEND'] = $model['file_blend'];
+if (!empty($model['file_3ds'])) $formats['3DS'] = $model['file_3ds'];
+if (!empty($model['file_glb'])) $formats['GLB'] = $model['file_glb'];
+?>-->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Название модели — Мозамбик</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <!-- 
+      [DEV HINT] 3D Viewer:
+      - Подключён Google Model Viewer для отображения .glb/.gltf моделей
+      - Атрибуты: camera-controls, auto-rotate, shadow-intensity настраиваются в теге <model-viewer>
+    -->
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: #050508;
+            color: #ffffff;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+        .bg-glow {
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.28;
+            z-index: -1;
+            pointer-events: none;
+            transition: transform 0.2s ease-out;
+        }
+        .glow-1 { background: #7b2fff; top: -220px; left: -220px; }
+        .glow-2 { background: #00ffff; bottom: -220px; right: -220px; }
+        header {
+            padding: 30px 50px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(123, 47, 255, 0.2);
+            position: relative;
+            z-index: 100;
+        }
+        .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 32px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #00ffff 0%, #7b2fff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 3px;
+        }
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 40px;
+        }
+        nav a {
+            color: #a0a0c0;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        nav a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #00ffff, #7b2fff);
+            transition: width 0.3s ease;
+        }
+        nav a:hover { color: #00ffff; }
+        nav a:hover::after { width: 100%; }
+        .page-wrap {
+            max-width: 1480px;
+            margin: 0 auto;
+            padding: 40px 50px 100px;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: #00ffff;
+            text-decoration: none;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-bottom: 24px;
+            transition: opacity 0.3s ease;
+        }
+        .back-link:hover { opacity: 0.8; }
+        .hero-product {
+            display: grid;
+            grid-template-columns: 1.12fr 0.88fr;
+            gap: 32px;
+            align-items: start;
+        }
+        .glass-card {
+            background: rgba(123, 47, 255, 0.08);
+            border: 1px solid rgba(123, 47, 255, 0.25);
+            border-radius: 34px;
+            backdrop-filter: blur(22px);
+            box-shadow: 0 18px 55px rgba(0,0,0,0.24);
+        }
+        .visual-card {
+            overflow: hidden;
+            position: relative;
+        }
+        .visual-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(0,255,255,0.12), transparent 28%),
+                radial-gradient(circle at 80% 80%, rgba(123,47,255,0.14), transparent 28%);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .main-image {
+            width: 100%;
+            display: block;
+            max-height: 780px;
+            object-fit: cover;
+        }
+        model-viewer {
+            width: 100%;
+            height: 700px;
+            display: block;
+            background: rgba(123,47,255,0.05);
+            --poster-color: transparent;
+        }
+        .viewer-wrap {
+            position: relative;
+            z-index: 2;
+            padding: 10px;
+        }
+        .viewer-note {
+            padding: 0 18px 18px;
+            color: #9ea6c5;
+            font-size: 15px;
+            position: relative;
+            z-index: 2;
+        }
+        .info-card { padding: 30px; }
+        .top-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(0,255,255,0.08);
+            border: 1px solid rgba(0,255,255,0.22);
+            color: #00ffff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .date { color: #8f90a8; font-size: 15px; }
+        .title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 42px;
+            line-height: 1.25;
+            margin-bottom: 16px;
+            color: #ffffff;
+            text-shadow:
+                0 0 30px rgba(0, 255, 255, 0.18),
+                0 0 40px rgba(123, 47, 255, 0.12);
+        }
+        .short-desc {
+            color: #d0d2e7;
+            font-size: 22px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+            margin: 22px 0;
+        }
+        .section-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 20px;
+            margin-bottom: 16px;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-transform: uppercase;
+        }
+        .full-desc {
+            color: #adb1cb;
+            font-size: 18px;
+            line-height: 1.85;
+        }
+        .downloads-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+            margin-top: 18px;
+        }
+        .download-btn {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 58px;
+            padding: 14px 18px;
+            border-radius: 18px;
+            text-decoration: none;
+            background: linear-gradient(135deg, #7b2fff 0%, #00ffff 100%);
+            color: #050508;
+            font-weight: 700;
+            font-size: 17px;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 28px rgba(123,47,255,0.25);
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 36px rgba(123,47,255,0.34);
+        }
+        .empty-files {
+            padding: 18px 20px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #b9bdd5;
+            font-size: 17px;
+            margin-top: 12px;
+        }
+        .info-panels {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+            margin-top: 28px;
+        }
+        .mini-panel {
+            padding: 20px;
+            border-radius: 22px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .mini-panel h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #ffffff;
+            margin-bottom: 8px;
+        }
+        .mini-panel p { color: #aeb2cb; font-size: 17px; }
+        .related-section { margin-top: 54px; }
+        .related-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 26px;
+            margin-bottom: 22px;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-transform: uppercase;
+        }
+        .related-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .related-card {
+            background: rgba(123, 47, 255, 0.08);
+            border: 1px solid rgba(123, 47, 255, 0.24);
+            border-radius: 28px;
+            overflow: hidden;
+            backdrop-filter: blur(18px);
+            text-decoration: none;
+            color: #ffffff;
+            transition: all 0.35s ease;
+        }
+        .related-card:hover {
+            transform: translateY(-6px);
+            border-color: rgba(0,255,255,0.5);
+            box-shadow: 0 20px 45px rgba(123,47,255,0.22);
+        }
+        .related-card img {
+            width: 100%;
+            height: 230px;
+            object-fit: cover;
+            display: block;
+        }
+        .related-content { padding: 18px; }
+        .related-content .cat {
+            display: inline-block;
+            margin-bottom: 10px;
+            color: #00ffff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .related-content h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 18px;
+            margin-bottom: 8px;
+            line-height: 1.45;
+        }
+        .related-content p { color: #9da0bb; font-size: 16px; }
+        footer {
+            padding: 80px 50px 40px;
+            background: linear-gradient(180deg, #0a0a0f 0%, #050508 100%);
+            border-top: 1px solid rgba(123, 47, 255, 0.3);
+            position: relative;
+            z-index: 1;
+        }
+        .footer-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 60px;
+            max-width: 1400px;
+            margin: 0 auto 60px;
+        }
+        .footer-brand .logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 32px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #00ffff 0%, #7b2fff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 3px;
+            margin-bottom: 20px;
+            display: block;
+        }
+        .footer-description {
+            font-size: 16px;
+            color: #a0a0c0;
+            line-height: 1.8;
+            margin-bottom: 25px;
+            max-width: 400px;
+        }
+        .footer-social { display: flex; gap: 15px; }
+        .social-link {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: rgba(123, 47, 255, 0.2);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            transition: all 0.3s ease;
+        }
+        .social-link:hover {
+            background: linear-gradient(135deg, #7b2fff 0%, #00ffff 100%);
+            color: #050508;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+            transform: translateY(-3px);
+        }
+        .social-link svg { width: 20px; height: 20px; }
+        .footer-links h4 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 25px;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            padding-bottom: 10px;
+        }
+        .footer-links h4::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 40px;
+            height: 2px;
+            background: linear-gradient(90deg, #00ffff, #7b2fff);
+        }
+        .footer-links ul { list-style: none; }
+        .footer-links li { margin-bottom: 15px; }
+        .footer-links a {
+            color: #8888aa;
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            position: relative;
+            padding-left: 0;
+        }
+        .footer-links a::before {
+            content: '▸';
+            position: absolute;
+            left: -15px;
+            color: #00ffff;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+        .footer-links a:hover {
+            color: #00ffff;
+            padding-left: 10px;
+        }
+        .footer-links a:hover::before { opacity: 1; }
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 40px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .copyright { font-size: 14px; color: #666688; }
+        .footer-bottom-links { display: flex; gap: 30px; }
+        .footer-bottom-links a {
+            color: #666688;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s ease;
+        }
+        .footer-bottom-links a:hover { color: #00ffff; }
+
+        @media (max-width: 1200px) {
+            .hero-product { grid-template-columns: 1fr; }
+            .related-grid { grid-template-columns: repeat(2, 1fr); }
+            .info-panels { grid-template-columns: 1fr; }
+            model-viewer { height: 560px; }
+        }
+        @media (max-width: 768px) {
+            header { padding: 20px; }
+            nav ul { display: none; }
+            .page-wrap { padding: 25px 20px 70px; }
+            .title { font-size: 30px; }
+            .short-desc { font-size: 18px; }
+            .downloads-grid { grid-template-columns: 1fr; }
+            .related-grid { grid-template-columns: 1fr; }
+            model-viewer { height: 420px; }
+            footer { padding: 60px 20px 30px; }
+            .footer-content {
+                grid-template-columns: 1fr;
+                gap: 40px;
+                text-align: center;
+            }
+            .footer-description { max-width: 100%; }
+            .footer-social { justify-content: center; }
+            .footer-links h4::after {
+                left: 50%;
+                transform: translateX(-50%);
+            }
+            .footer-bottom {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+            }
+            .footer-bottom-links {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-glow glow-1"></div>
+    <div class="bg-glow glow-2"></div>
+
+    <header>
+        <div class="logo">МОЗАМБИК</div>
+        <nav>
+            <ul>
+                <li><a href="index.html">Главная</a></li>
+                <li><a href="catalog.html">Каталог</a></li>
+                <li><a href="about.html">О нас</a></li>
+                <li><a href="contacts.html">Контакты</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="page-wrap">
+        <!-- [DEV HINT] Ссылка "Назад": ведёт на catalog.html (статика) или catalog.php (бэкенд) -->
+        <a href="catalog.html" class="back-link">← Назад в каталог</a>
+
+        <div class="hero-product">
+            <div class="glass-card visual-card">
+                <!-- 
+                  [DEV HINT] Условное отображение контента:
+                  - Если $model['file_glb'] не пустой → показывать <model-viewer>
+                  - Иначе → показывать статичное изображение $model['image_main']
+                  - viewer_file: путь к .glb/.gltf для 3D-просмотра
+                  - image_main: превью-изображение в формате JPG/PNG
+                -->
+                
+                <!-- Вариант с 3D-просмотром -->
+                <!--
+                <div class="viewer-wrap">
+                    <model-viewer
+                        src="models/example-model.glb"
+                        alt="Название модели"
+                        camera-controls
+                        auto-rotate
+                        shadow-intensity="1"
+                        exposure="1"
+                        touch-action="pan-y"
+                        interaction-prompt="auto">
+                    </model-viewer>
+                </div>
+                <div class="viewer-note">
+                    Вращайте модель мышкой или пальцем, чтобы рассмотреть её со всех сторон.
+                </div>
+                -->
+
+                <!-- Вариант с изображением (активен по умолчанию для статики) -->
+                <!-- 
+                  [DEV HINT] Изображение товара:
+                  - src="$model['image_main']" — путь к превью
+                  - Все выходные данные экранировать: htmlspecialchars()
+                -->
+                <img src="images/products/armchair-preview.jpeg" alt="Современный стул" class="main-image">
+            </div>
+
+            <div class="glass-card info-card">
+                <div class="top-meta">
+                    <!-- 
+                      [DEV HINT] Мета-данные:
+                      - Категория: $model['category']
+                      - Дата: date('d.m.Y', strtotime($model['created_at']))
+                    -->
+                    <span class="badge">Интерьер</span>
+                    <span class="date">Добавлено: 15.03.2026</span>
+                </div>
+
+                <!-- 
+                  [DEV HINT] Заголовок модели:
+                  - Выводить $model['title'] с экранированием
+                  - Для статики: заменить на актуальное название
+                -->
+                <h1 class="title">Современный стул</h1>
+
+                <!-- 
+                  [DEV HINT] Краткое описание:
+                  - Выводить $model['short_description'] если не пустое
+                  - Экранировать через htmlspecialchars()
+                -->
+                <div class="short-desc">
+                    Минималистичный стул для интерьеров в стиле сканди. Оптимизированная сетка, готовые материалы.
+                </div>
+
+                <div class="divider"></div>
+
+                <h2 class="section-title">Описание</h2>
+                <!-- 
+                  [DEV HINT] Полное описание:
+                  - Выводить $model['full_description'] с nl2br() для переносов строк
+                  - Экранировать: htmlspecialchars($model['full_description'])
+                  - Если описание пустое — показывать заглушку
+                -->
+                <div class="full-desc">
+                    Минималистичный стул для интерьеров в стиле сканди. Оптимизированная сетка, готовые материалы.
+
+Особенности модели:
+• Низкополигональная геометрия (2.4K треугольников)
+• Текстуры 2K: Albedo, Normal, Roughness, Metalness
+• Корректные UV-развёртки без наложений
+• Готовые материалы для Blender, Unity, Unreal Engine
+
+В комплекте:
+• Файлы форматов: FBX, OBJ, GLTF, BLEND
+• Папка с текстурами в PNG
+• README с инструкцией по импорту
+• Лицензия: свободное использование с указанием автора
+                </div>
+
+                <div class="divider"></div>
+
+                <h2 class="section-title">Форматы для скачивания</h2>
+
+                <!-- 
+                  [DEV HINT] Кнопки скачивания:
+                  - Формировать массив $formats из не пустых полей: file_fbx, file_obj, file_blend, file_3ds, file_glb
+                  - Каждая кнопка: ссылка на файл с атрибутом download
+                  - Если массив пуст — показывать блок .empty-files
+                  - Все пути экранировать через htmlspecialchars()
+                -->
+                <div class="downloads-grid">
+                    <a class="download-btn" href="downloads/example-model.fbx" download>
+                        Скачать FBX
+                    </a>
+                    <a class="download-btn" href="downloads/example-model.obj" download>
+                        Скачать OBJ
+                    </a>
+                    <a class="download-btn" href="downloads/example-model.blend" download>
+                        Скачать BLEND
+                    </a>
+                    <a class="download-btn" href="downloads/example-model.glb" download>
+                        Скачать GLB
+                    </a>
+                </div>
+
+                <!-- 
+                  [DEV HINT] Пустое состояние для файлов:
+                  Показывать этот блок, если $formats === []
+                  <div class="empty-files">
+                    Файлы для скачивания пока не добавлены.
+                  </div>
+                -->
+
+                <div class="info-panels">
+                    <div class="mini-panel">
+                        <h3>Категория</h3>
+                        <p>Интерьер</p>
+                    </div>
+                    <div class="mini-panel">
+                        <h3>Дата публикации</h3>
+                        <p>15.03.2026</p>
+                    </div>
+                    <div class="mini-panel">
+                        <h3>Использование</h3>
+                        <p>Визуализация, сцены, презентации</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 
+          [DEV HINT] Блок похожих товаров:
+          - Запрос к БД: SELECT * FROM models WHERE category = ? AND id != ? ORDER BY created_at DESC LIMIT 3
+          - Цикл по $related, каждая карточка → product.html?slug=$item['slug']
+          - Поля: title, slug, image_main, category, short_description
+          - При отсутствии результатов блок не выводится
+        -->
+        <div class="related-section">
+            <h2 class="related-title">Похожие модели</h2>
+
+            <div class="related-grid">
+                <!-- Похожие товары -->
+                <a class="related-card" href="product.html?slug=minimal-table">
+                    <img src="images/products/table-preview.jpg" alt="Минималистичный стол">
+                    <div class="related-content">
+                        <span class="cat">Интерьер</span>
+                        <h3>Минималистичный стол</h3>
+                        <p>Стол в скандинавском стиле с деревянными ножками и матовой поверхностью.</p>
+                    </div>
+                </a>
+
+                <a class="related-card" href="product.html?slug=scandi-lamp">
+                    <img src="images/products/lamp-preview.jpg" alt="Сканди-лампа">
+                    <div class="related-content">
+                        <span class="cat">Интерьер</span>
+                        <h3>Сканди-лампа</h3>
+                        <p>Настольная лампа с текстильным абажуром и металлическим основанием.</p>
+                    </div>
+                </a>
+
+                <a class="related-card" href="product.html?slug=plant-pot">
+                    <img src="images/products/pot-preview.jpg" alt="Кашпо для растений">
+                    <div class="related-content">
+                        <span class="cat">Интерьер</span>
+                        <h3>Кашпо для растений</h3>
+                        <p>Керамическое кашпо с дренажным отверстием и поддоном в комплекте.</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-brand">
+                <div class="logo">МОЗАМБИК</div>
+                <p class="footer-description">
+                    Библиотека бесплатных 3D моделей для дизайнеров,
+                    архитекторов и художников по всему миру.
+                </p>
+                <div class="footer-social">
+                    <!-- [DEV HINT] Соцсети: заменить # на актуальные ссылки -->
+                    <a href="#" class="social-link" aria-label="Twitter">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/></svg>
+                    </a>
+                    <a href="#" class="social-link" aria-label="Instagram">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                    </a>
+                    <a href="#" class="social-link" aria-label="YouTube">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+                    </a>
+                    <a href="#" class="social-link" aria-label="LinkedIn">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                    </a>
+                </div>
+            </div>
+
+            <div class="footer-links">
+                <h4>Навигация</h4>
+                <ul>
+                    <li><a href="index.html">Главная</a></li>
+                    <li><a href="catalog.html">Каталог</a></li>
+                    <li><a href="about.html">О нас</a></li>
+                    <li><a href="contacts.html">Контакты</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-links">
+                <h4>Ресурсы</h4>
+                <ul>
+                    <li><a href="#">Документация</a></li>
+                    <li><a href="#">API</a></li>
+                    <li><a href="#">Блог</a></li>
+                    <li><a href="#">Поддержка</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-links">
+                <h4>Информация</h4>
+                <ul>
+                    <li><a href="#">Лицензия</a></li>
+                    <li><a href="#">Политика конфиденциальности</a></li>
+                    <li><a href="#">Условия использования</a></li>
+                    <li><a href="#">FAQ</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <p class="copyright">© 2026 Мозамбик. Библиотека бесплатных 3D моделей. Все права защищены.</p>
+            <div class="footer-bottom-links">
+                <a href="#">Sitemap</a>
+                <a href="#">Cookies</a>
+                <a href="#">Privacy</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 
+      [DEV HINT] Анимации:
+      - Параллакс-эффект для .bg-glow элементов при движении мыши
+      - Для улучшения производительности можно вынести в отдельный module.js
+    -->
+    <script>
+        document.addEventListener('mousemove', (e) => {
+            document.querySelectorAll('.bg-glow').forEach((g, i) => {
+                const s = (i + 1) * 20;
+                const x = (0.5 - e.clientX / window.innerWidth) * s;
+                const y = (0.5 - e.clientY / window.innerHeight) * s;
+                g.style.transform = `translate(${x}px, ${y}px)`;
+            });
+        });
+    </script>
+</body>
+</html>
